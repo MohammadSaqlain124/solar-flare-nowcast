@@ -370,8 +370,9 @@ Framework: PyTorch, train on Colab (free GPU), VS Code home base.
 - Honest claim now: Aditya MATCHES the GOES workhorse on identical days, from one
   newer instrument, 43% fewer observing days. Differentiator is the physics lead.
 
-## ABLATION — soft-only Aditya (verified, same 46 days/folds)
-- Drop log_xrsa/hardness/rate_a: warning HSS 0.488+/-0.067 vs fused 0.483+/-0.024,
-  event recall 76/87=87% IDENTICAL, lead 4.0 vs 3.0 min. Soft channel carries the
-  full 5-min warning signal; hard channel redundant for THIS task. (single seed)
-- trainer.py now infers n_feat from X.shape[2] (was hardcoded 6). No-op at 6 feat.
+## ABLATION — soft-only Aditya, seed-hardened (verified, same 46 days/folds)
+- 3 seeds each. warning HSS: soft-only 0.474+/-0.006 vs fused 0.467+/-0.030.
+  event recall ~83% vs ~86% (overlapping Wilson CIs). TIE within seed scatter.
+- Hard channel adds nothing to 5-min warning; soft rise carries the full signal.
+  Soft-only is also the steadier model (lower seed variance). CONFIRMED, not single-seed.
+- Deck: quote seed-averaged ~0.47 HSS, not the 0.483 single point.
