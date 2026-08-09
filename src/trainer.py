@@ -89,7 +89,7 @@ def fit_and_eval(z, arch, hp, seed=0, masks=None, device=None, verbose=False):
 
     train, val, test = make_loaders(z, masks, batch_size=hp["batch"])
     pw = pos_weights(z, tr_m)
-    net = FlareCNN(**ARCH[arch]).to(device)
+    net = FlareCNN(n_feat=int(z["X"].shape[2]), **ARCH[arch]).to(device)
     opt = optim.Adam(net.parameters(), lr=hp["lr"])
 
     best_ap, best_state, bad = -1.0, None, 0
