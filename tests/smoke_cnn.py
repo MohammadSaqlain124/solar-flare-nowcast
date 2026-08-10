@@ -23,16 +23,16 @@ NPZ = ROOT / "data" / "dataset.npz"
 torch.manual_seed(0)
 train, val, test = make_loaders(NPZ, batch_size=64)
 pw = pos_weights(NPZ)
-print(f"pos_weight  detection {pw['detection']:.1f}   warning {pw['warning']:.1f}")
+print(f"pos_weight  detection {pw['detection']:.1f}   warning {pw['warning']:.1f}   classify {pw['classify']:.1f}")
 
-xb, yd, yw = next(iter(train))
-print(f"batch {tuple(xb.shape)}   positives in batch: det {int(yd.sum())} warn {int(yw.sum())}")
+xb, yd, yw, yc = next(iter(train))
+print(f"batch {tuple(xb.shape)}   positives in batch: det {int(yd.sum())} warn {int(yw.sum())} active {int((yc>=1).sum())} M+ {int((yc>=2).sum())}")
 
 # baseline cnn: dilation 1, no residual
 net = FlareCNN()
-det, warn = net(xb)
-assert det.shape == (xb.shape[0],) and warn.shape == (xb.shape[0],), "head shape wrong"
-assert torch.isfinite(det).all() and torch.isfinite(warn).all(), "non-finite logits"
+det, warn, cls = net(xb)
+assert det.shape == warn.shape == cls.shape == (xb.shape[0],), "head shape wrong"
+assert torch.isfinite(det).all() and torch.isfinite(warn).all() and torch.isfinite(cls).all(), "non-finite logits"
 
 # weighted bce on detection, focal on the brutal warning imbalance
 ld = weighted_bce(det, yd, pw["detection"])

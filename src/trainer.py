@@ -32,7 +32,7 @@ BASE = {
 
 
 def default_hp():
-    return dict(epochs=30, batch=256, lr=1e-3, patience=6, warn_weight=1.0)
+    return dict(epochs=30, batch=256, lr=1e-3, patience=6, warn_weight=1.0, cls_weight=1.0)
 
 
 def avg_precision(y, s):
@@ -48,13 +48,18 @@ def avg_precision(y, s):
     return float(np.sum((rec - rec_prev) * prec))
 
 
-def run_epoch(net, loader, pw, warn_w, device, opt):
+def run_epoch(net, loader, pw, warn_w, cls_w, device, opt):
     net.train()
     tot = n = 0
-    for xb, yd, yw in loader:
-        xb, yd, yw = xb.to(device), yd.to(device), yw.to(device)
-        od, ow = net(xb)
+    for xb, yd, yw, yc in loader:
+        xb, yd, yw, yc = xb.to(device), yd.to(device), yw.to(device), yc.to(device)
+        od, ow, oc = net(xb)
         loss = weighted_bce(od, yd, pw["detection"]) + warn_w * focal_loss(ow, yw)
+        # classify only where a flare is actually active (yc>=1); target is M+ (yc>=2).
+        # cls_w=0 -> this term vanishes and det/warn training is byte-identical to before.
+        act = yc >= 1
+        if cls_w and act.any():
+            loss = loss + cls_w * weighted_bce(oc[act], (yc[act] >= 2).float(), pw["classify"])
         opt.zero_grad()
         loss.backward()
         opt.step()
@@ -67,16 +72,19 @@ def collect(net, loader, device):
     # probabilities over a whole split, in loader order. val/test unshuffled so
     # this lines up with event_id[mask].
     net.eval()
-    dp, wp, yd, yw = [], [], [], []
+    dp, wp, cp, yd, yw, yc = [], [], [], [], [], []
     with torch.no_grad():
-        for xb, d, w in loader:
-            od, ow = net(xb.to(device))
+        for xb, d, w, c in loader:
+            od, ow, oc = net(xb.to(device))
             dp.append(torch.sigmoid(od).cpu())
             wp.append(torch.sigmoid(ow).cpu())
+            cp.append(torch.sigmoid(oc).cpu())
             yd.append(d)
             yw.append(w)
+            yc.append(c)
     cat = lambda xs: torch.cat(xs).numpy()
-    return cat(dp), cat(wp), cat(yd).astype(int), cat(yw).astype(int)
+    return (cat(dp), cat(wp), cat(cp),
+            cat(yd).astype(int), cat(yw).astype(int), cat(yc).astype(int))
 
 
 def fit_and_eval(z, arch, hp, seed=0, masks=None, device=None, verbose=False):
@@ -89,14 +97,15 @@ def fit_and_eval(z, arch, hp, seed=0, masks=None, device=None, verbose=False):
 
     train, val, test = make_loaders(z, masks, batch_size=hp["batch"])
     pw = pos_weights(z, tr_m)
-    net = FlareCNN(n_feat=int(z["X"].shape[2]), **ARCH[arch]).to(device)
+    net = FlareCNN(n_feat=int(z["X"].shape[2]), **ARCH[arch]).to(device)   # infer F from data - was hardcoded 6 via the default, breaks the soft-only ablation
     opt = optim.Adam(net.parameters(), lr=hp["lr"])
+    cls_w = hp.get("cls_weight", 1.0)
 
     best_ap, best_state, bad = -1.0, None, 0
     for ep in range(1, hp["epochs"] + 1):
-        tr_loss = run_epoch(net, train, pw, hp["warn_weight"], device, opt)
-        dpv, wpv, _, ywv = collect(net, val, device)
-        w_ap = avg_precision(ywv, wpv)
+        tr_loss = run_epoch(net, train, pw, hp["warn_weight"], cls_w, device, opt)
+        _, wpv, _, _, ywv, _ = collect(net, val, device)
+        w_ap = avg_precision(ywv, wpv)                # selection stays on warning AP - keeps det/warn identical at cls_w=0
         flag = ""
         if w_ap > best_ap + 1e-4:
             best_ap, bad = w_ap, 0
@@ -113,22 +122,32 @@ def fit_and_eval(z, arch, hp, seed=0, masks=None, device=None, verbose=False):
 
     net.load_state_dict(best_state)
 
-    dpv, wpv, ydv, ywv = collect(net, val, device)
-    dpt, wpt, ydt, ywt = collect(net, test, device)
+    dpv, wpv, cpv, ydv, ywv, ycv = collect(net, val, device)
+    dpt, wpt, cpt, ydt, ywt, yct = collect(net, test, device)
     thr_d, _ = pick_threshold(ydv, dpv, "TSS")
     thr_w, _ = pick_threshold(ywv, wpv, "HSS")
     ev_te = z["event_id"][te_m]
     det_pred = (dpt >= thr_d).astype(int)
     warn_pred = (wpt >= thr_w).astype(int)
 
+    # classification: C vs M+, only on flare-active windows (yc>=1). threshold on
+    # val actives by HSS, then score test actives. positive class = M+.
+    av, at = ycv >= 1, yct >= 1
+    thr_c, _ = pick_threshold((ycv[av] >= 2).astype(int), cpv[av], "HSS")
+    y_cls = (yct[at] >= 2).astype(int)
+    cls_pred = (cpt[at] >= thr_c).astype(int)
+    ev_cls = ev_te[at]
+
     return {
         "detection": evaluate(ydt, det_pred, ev_te),
         "warning": evaluate(ywt, warn_pred, ev_te),
+        "classify": evaluate(y_cls, cls_pred, ev_cls),
         "best_ap": best_ap,
-        "thr": (float(thr_d), float(thr_w)),
+        "thr": (float(thr_d), float(thr_w), float(thr_c)),
         "state": best_state,
         "test": {"det_pred": det_pred, "warn_pred": warn_pred,
-                 "y_det": ydt, "y_warn": ywt, "event_id": ev_te},
+                 "y_det": ydt, "y_warn": ywt, "event_id": ev_te,
+                 "cls_pred": cls_pred, "y_cls": y_cls, "cls_event_id": ev_cls},
     }
 
 

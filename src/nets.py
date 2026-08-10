@@ -64,8 +64,11 @@ class FlareCNN(nn.Module):
                                  nn.Dropout(dropout), nn.Linear(head_hidden, 1))
         self.det_head = head()
         self.warn_head = head()
+        self.cls_head = head()                  # C vs M+, read on active-flare windows only
 
     def forward(self, x):
         z = self.trunk(x.transpose(1, 2))       # (B,T,F) -> (B,F,T) -> (B,C,T)
         z = z[..., -1]                          # last timestep = the labelled "now"
-        return self.det_head(z).squeeze(-1), self.warn_head(z).squeeze(-1)
+        return (self.det_head(z).squeeze(-1),
+                self.warn_head(z).squeeze(-1),
+                self.cls_head(z).squeeze(-1))

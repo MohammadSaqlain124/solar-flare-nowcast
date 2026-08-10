@@ -17,10 +17,11 @@ def as_arrays(npz):
 
 
 def _subset(z, mask):
-    X = torch.from_numpy(z["X"][mask])                      # (n,180,6) float32
+    X = torch.from_numpy(z["X"][mask])                      # (n,180,F) float32
     yd = torch.from_numpy(z["y_progress"][mask].astype("float32"))
     yw = torch.from_numpy(z["y_warn"][mask].astype("float32"))
-    return TensorDataset(X, yd, yw)
+    yc = torch.from_numpy(z["y_class"][mask].astype("int64"))   # 0 none, 1 C, 2 M, 3 X
+    return TensorDataset(X, yd, yw, yc)
 
 
 def make_loaders(npz, masks=None, batch_size=256, num_workers=0):
@@ -44,4 +45,10 @@ def pos_weights(npz, train_mask=None):
         pos = int(y.sum())
         return float((len(y) - pos) / pos) if pos else 0.0
 
-    return {"detection": w(z["y_progress"]), "warning": w(z["y_warn"])}
+    yc = z["y_class"][train_mask]
+    act = yc >= 1                                   # only flare-active windows classify
+    mplus = int((yc[act] >= 2).sum())               # M+ is the positive class
+    c = int(act.sum()) - mplus
+    cls_w = float(c / mplus) if mplus else 0.0
+
+    return {"detection": w(z["y_progress"]), "warning": w(z["y_warn"]), "classify": cls_w}
