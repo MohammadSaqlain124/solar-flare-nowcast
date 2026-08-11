@@ -1,43 +1,13 @@
 # PROJECT_STATE — Solar Flare Nowcasting on Aditya-L1 (TWIN-X)
 
-> Paste this into the first message of a new chat to bring Claude fully up to
-> speed. Everything needed to resume is here; nothing relies on memory.
 
-**Owner:** Sam · **Last updated:** 2026-07-28 · **Status:** Phases 1-4 done.
+**Owner:** Saqlain · **Last updated:** 2026-07-28 · **Status:** Phases 1-4 done.
 GOES pipeline built and beaten; real Aditya-L1 data downloaded, fused, and
 trained on. Next: hard-channel lead-time measurement (the pitch's key number),
 then the paired same-days comparison.
 
 ---
 
-## 0. Code style (READ FIRST — applies to all new code)
-
-Comments should read like a working dev wrote them, not a tutorial. If asked to
-rewrite existing code for voice, change **only** comments/docstrings/log strings,
-never the logic (I verify with an AST diff).
-
-- terse, lowercase fragments; comment the non-obvious *why* only, skip anything
-  that restates the code. uneven density on purpose - comment the tricky bits,
-  leave the obvious lines bare. do NOT give every function a docstring.
-- no decorative banners (`# ==== section ====`), no column-aligned trailing
-  comments, no ALL-CAPS "THE KEY LINE" emphasis.
-- plain punctuation: `-` and `->`, not em-dashes. avoid "i.e./e.g." and formal
-  phrasing. lowercase sentence fragments are fine.
-- a short war-story note where a bug bit is welcome ("gotcha:", "learned that
-  one", "careful:").
-- no teaching tone. write for my future self, not a student. short one-line
-  docstrings only where they earn their place.
-- every file in `src/`, every driver in root, and `config.py` /
-  `run_pipeline.py` are already in this voice - match them. the notebooks still
-  have the old verbose comments; rewrite to this voice when you touch them.
-- (Context: I want the code to read as human-written. If a hackathon asks about
-  AI use, the honest line - "used AI as a pair-programmer, directed all of it" -
-  is fine and true; the styling is about readability, not hiding the tooling.)
-
-**Two standing rules for chats:** correct my English, and rate each question's
-quality (Ok / Good / Great).
-
----
 
 ## 1. The project in one paragraph
 
@@ -127,7 +97,9 @@ Physics:
 - **Median flare rise time: 8 min** - physical ceiling on early warning.
 - **Derivative lead (soft rise-rate vs soft peak): 2.17 min** (1.72 fast flares).
 - **GOES xrsa lead: 44 sec** - GOES's harder channel is useless for warning.
-  *The HEL1OS counterpart to this number is NOT yet measured - see section 8.*
+- **HEL1OS hard lead: MEASURED (nb08) = median 3.38 min (202 s)**, 95% CI
+  [2.95, 3.85], n=418 detectable flares (98% of measured). ~4.6x GOES's 44 s.
+  Model-free physics - the single most quotable number. Full detail in 7b.1.
 - **e-folding decay ~12.6 min, class-independent.**
 - **Horizon:** 5-min ~98% nowcastable; ~83% at 10 min. HORIZON_MIN = 5.
 - **Cadence:** 1s chosen by experiment. store 1s, feed model 10s (180-step
@@ -213,11 +185,78 @@ Same code, different instruments. `aditya_dataset.npz`: 59,036 windows, train
 | TSS | 0.437 ± 0.064 | **0.544 ± 0.092** |
 | pooled event recall | 79% [72-85%], n=131 | **89% [80-94%], n=87** |
 
-**How to state this honestly:** *fused SoLEXS+HEL1OS achieves comparable or
-better warning skill than the GOES surrogate, with 89% vs 79% event recall, on
-43% fewer observing days.* The CIs graze each other, so do **not** claim
-statistical significance. Direction is consistent across HSS, TSS, and event
-recall - that's the claim, and it's defensible.
+**⚠ SUPERSEDED — RETRACTED, see 7b.2.** The table above compares GOES on 80
+days vs Aditya on its 46 - DIFFERENT flares. The paired same-46-days rebuild
+(7b.2) showed those 46 days were simply easier: on identical days GOES and
+Aditya TIE (GOES recall jumps 79%->91% when restricted to Aditya's dates). Do
+NOT claim "Aditya warns better" - that claim is retracted. Honest statement now:
+Aditya MATCHES the GOES workhorse on identical days, from one newer instrument,
+43% fewer observing days. The differentiator is the physics lead (7b.1).
+
+---
+
+## 7b. Hard-lead physics + fusion interrogation (DONE — this session)
+
+### 7b.1 HEL1OS hard-channel lead (nb08, verified) — THE HEADLINE
+- HEL1OS 20-30 keV peaks median **3.38 min (202 s)** before the SoLEXS soft peak,
+  95% CI [2.95, 3.85], n=418 detectable flares (98% of measured). vs GOES 44 s =
+  ~4.6x. Fast flares (rise<=5 min) still 2.02 min. C 3.22 / M 3.62 min (M>C,
+  consistent with stronger non-thermal in bigger flares).
+- Anchor: identical measure() on the 1s GOES slice reproduces stored 2.17 min
+  derivative / 0.73 min xrsa (got 1.95 / 0.62, in band) -> method sound.
+- Robust across smoothing widths (3.2-3.7 min); not a filter artifact. Model-free.
+- Lesson: 1-min cadence inflates the derivative lead (2.2->3.0). The GOES anchor
+  "FAIL" at 3.0 was that cadence effect, not a bug - run the anchor on the 1s slice.
+
+### 7b.2 Paired same-46-days GOES (build_goes46.py) — RETRACTS "Aditya better"
+- Subset the GOES dataset.npz to the exact 46 Aditya dates, walk-forward:
+  GOES-46 warning HSS 0.477+/-0.049, recall **91% [84-96] n=93**.
+  Aditya-46 warning HSS 0.483+/-0.024, recall **87% [79-93] n=87**. -> TIE.
+- GOES recall jumped 79% (80 days) -> 91% (Aditya's 46 days): those days were
+  easier. The 89-vs-79 gap was the DAYS, not the instrument. Claim retracted.
+
+### 7b.3 Lead-time per model (lead_time.py)
+- First-fire lead before peak: GOES-46 and Aditya-46 BOTH median 3.00 min, IQR
+  [2,4], only ~3% of events fire at the 5-min horizon ceiling. The soft rise
+  already carries the warning signal within 5 min; the hard channel's 3-min
+  physics lead adds NO extra earliness at this horizon.
+
+### 7b.4 Soft-only ablation (build_ablation.py), 3 seeds
+- Drop log_xrsa/hardness/rate_a: warning HSS soft-only **0.474+/-0.006** vs fused
+  **0.467+/-0.030**; recall ~83% vs ~86% (overlapping Wilson CIs). TIE within
+  seed scatter. Soft-only is also the STEADIER model (lower seed variance).
+- Hard channel adds nothing to 5-min warning; soft rise carries the full signal.
+- NB: quote the seed-averaged fused warning HSS **~0.47**, NOT single-seed 0.483.
+
+### 7b.5 Classification head — C vs M+ (nets/trainer/data_torch/walk_forward + classify_events.py)
+- Third head on the shared trunk, masked to active windows (y_class>=1), target
+  M+ (y_class>=2), gated by cls_weight (cls_weight=0 recovers det/warn). Adding
+  it left warning inside the locked seed band (no regression).
+- Per-event (flux-peak anchored) AUC: fused **0.415**, soft **0.468** - BOTH
+  ~chance. Head predicts the base rate (calls everything M+). Hard does NOT help.
+  Classification is the WEAK third output; ship as best-effort label, say so.
+- Aggregation lesson: mean-over-event AUC read 0.30 (inverted) - a bug, not the
+  model. M+ flares have long decay tails; averaging over them anti-correlates
+  with class. Anchor the per-event score to the FLUX PEAK (argmax soft). Verified
+  on synthetic (mean->0.0, flux-peak->1.0).
+
+### 7b.6 The arc (put in the deck)
+The non-thermal precursor is REAL (3.4 min, measured) but at the MODEL level the
+hard channel is REDUNDANT for short-horizon warning - proved three ways (paired
+days, per-model lead, ablation) and classification agrees. Honest headline: "the
+precursor is real, but for 5-min warning the soft channel already suffices." A
+tested negative result is a contribution, not a gap.
+
+### 7b.7 New files this session
+- notebooks/08_hard_lead_aditya.ipynb - hard-lead measurement + GOES anchor.
+- build_goes46.py - subset GOES dataset.npz to the 46 Aditya dates.
+- lead_time.py - per-model first-fire warning lead.
+- build_ablation.py - soft-only (3-feature) dataset.
+- classify_events.py - per-event C-vs-M+ readout (flux-peak anchored, ROC-AUC).
+- src edits: nets.py (+cls_head, 3 outputs), data_torch.py (y_class in loaders +
+  classify pos_weight), trainer.py (masked cls loss, n_feat from X.shape[2],
+  cls threshold/eval, cls_prob/cls_soft in test dict), walk_forward.py
+  (--cls-weight + classify row), tests/smoke_cnn.py (4-tuple batch, 3 heads).
 
 ---
 
@@ -299,6 +338,11 @@ All causal (backward diffs, trailing rolling). Never `np.gradient`.
 real `dataset.npz` used 5 (`meta[3]`, warning positive rate 1.1%). **Fix that
 stale value in the notebook.**
 
+**Classification (C vs M+):** mask to active windows (y_class>=1), target M+
+(y_class>=2), pos_weight = C/M+ on active train windows. Per-event score = model
+M+ prob at the FLUX-PEAK window (argmax soft), scored threshold-free by ROC-AUC.
+NEVER mean over the event - the decay tail inverts it.
+
 **Aditya -> GOES schema:** soft -> `xrsb`, hard -> `xrsa`. Units differ (counts
 vs W/m²) but every feature is log'd then z-scored on train, so absolute scale
 washes out - that's *why* the comparison is fair.
@@ -328,51 +372,19 @@ on val - detection by TSS, warning by HSS.
 
 ## 12. NEXT (in priority order)
 
-1. **Measure the HEL1OS hard-channel lead time** — the counterpart to GOES's
-   useless 44 s xrsa lead. How many seconds/minutes does the CdTe1 20-30 keV
-   rise lead the SoLEXS soft peak, across the 46 fused days? Pure physics on
-   `aditya_clean_1s.parquet`, no training, notebook-02 style. **If this lands at
-   2-3 minutes vs GOES's 44 s, it is the single most quotable number in the
-   entire pitch** and it proves the Neupert-effect claim independently of any
-   model.
-2. **Paired same-46-days GOES rebuild.** Right now GOES ran on 80 days and
-   Aditya on its 46 - different flares, so some of the difference could be "those
-   46 days had easier flares." Filter `goes_clean_1s.parquet` to the same 46
-   dates, re-run `featurize` + `walk_forward`, and the comparison becomes
-   "better on identical data" instead of "comparable on different data".
-   Small job - `featurize` already takes any clean parquet.
-3. **Classification head (C/M).** The third promised output, still unbuilt.
-   `y_class` is already in both npz files; add a third head to the shared trunk.
-   Report C and M only (B undetectable at solar max, X n=2).
-4. **Phase 5 demo:** FastAPI/WebSocket/Redis/Docker/React is a project in
-   itself. A working model + simple dashboard beats a half-built stack.
-5. **Optional:** re-save the GOES checkpoint from the best seed (`models/tcn.pt`
-   is a single draw at HSS 0.467, below the 5-seed mean 0.529). Try
-   `--epochs 45` (best val AP was still climbing at epoch 26/30).
-6. **LSTM / Transformer:** only if 1-5 are done. Architecture has not moved
-   warning once. Don't expect gains.
+DONE this session: HEL1OS hard-lead [7b.1], paired same-46-days GOES [7b.2],
+lead-time-per-model [7b.3], soft-only ablation [7b.4], classification head
+[7b.5]. **The model is complete** - three outputs, each honestly characterised.
+Remaining:
+
+1. **Phase 5 demo / frontend (NEXT):** live flux dashboard + warning banner over
+   the three outputs. The causal model already supports it. A working model +
+   simple dashboard beats a half-built stack.
+2. **Deck refresh:** lead with the 3.4-min physics headline; state the model as
+   "matches GOES from one newer instrument, 43% fewer days"; report the
+   fusion-redundant finding as a strength (tested three ways), not a gap.
+3. **Optional / future:** longer horizon (8-10 min) where the hard lead MIGHT
+   pay off (coverage drops to ~83%); more Aditya days for tighter stats; a better
+   classifier (weakest output). LSTM/Transformer still not expected to move warning.
 
 Framework: PyTorch, train on Colab (free GPU), VS Code home base.
-
-## 12.1 RESULT — HEL1OS hard-channel lead time (nb08, verified)
-- HEL1OS 20-30 keV peaks median 3.38 min (202 s) before SoLEXS soft peak,
-  95% CI [2.95, 3.85], n=418 detectable flares (98% of measured). vs GOES xrsa 44 s.
-- Anchor: same measure() reproduces GOES 2.17/0.73 on 1s slice (1.95/0.62, in band).
-- Robust across smoothing (3.2-3.7 min). Fast flares (rise<=5) still 2.02 min.
-- This is instrument-level physics, no model. The project's most quotable number.
-
-## 12.2 RESULT — paired same-46-days GOES (CORRECTS the earlier claim)
-- On the SAME 46 days, GOES and Aditya are TIED on warning:
-  GOES-46 HSS 0.477+/-0.049, recall 91% [84-96] n=93.
-  Aditya-46 HSS 0.483+/-0.024, recall 87% [79-93] n=87.
-- GOES recall jumped 79% (80 days) -> 91% (Aditya's 46 days): those days were
-  easier. The 89-vs-79 gap was the DAYS, not the instrument. Retract "warns better".
-- Honest claim now: Aditya MATCHES the GOES workhorse on identical days, from one
-  newer instrument, 43% fewer observing days. Differentiator is the physics lead.
-
-## ABLATION — soft-only Aditya, seed-hardened (verified, same 46 days/folds)
-- 3 seeds each. warning HSS: soft-only 0.474+/-0.006 vs fused 0.467+/-0.030.
-  event recall ~83% vs ~86% (overlapping Wilson CIs). TIE within seed scatter.
-- Hard channel adds nothing to 5-min warning; soft rise carries the full signal.
-  Soft-only is also the steadier model (lower seed variance). CONFIRMED, not single-seed.
-- Deck: quote seed-averaged ~0.47 HSS, not the 0.483 single point.
