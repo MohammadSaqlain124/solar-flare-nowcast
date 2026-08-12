@@ -1,0 +1,21 @@
+# data + artifacts - never commit these, they're GBs of FITS
+data/
+outputs/
+models/
+*.npz
+*.parquet
+*.zip
+*.fits
+*.lc.gz
+
+# env
+venv/
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# editor / os
+.vscode/
+.DS_Store
+Thumbs.db
