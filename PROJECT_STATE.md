@@ -1,13 +1,11 @@
 # PROJECT_STATE — Solar Flare Nowcasting on Aditya-L1 (TWIN-X)
 
-
-**Owner:** Saqlain · **Last updated:** 2026-07-28 · **Status:** Phases 1-4 done.
-GOES pipeline built and beaten; real Aditya-L1 data downloaded, fused, and
-trained on. Next: hard-channel lead-time measurement (the pitch's key number),
-then the paired same-days comparison.
+**Owner:** Sam · **Status:** Complete. Full pipeline on real Aditya-L1 data,
+three validated outputs (detect / warn / classify), and a live demo frontend.
+Headline result: HEL1OS hard X-rays lead the soft peak by ~3.4 min vs GOES's
+44 s. Results in sections 6-7c; remaining work in section 12.
 
 ---
-
 
 ## 1. The project in one paragraph
 
@@ -260,6 +258,24 @@ tested negative result is a contribution, not a gap.
 
 ---
 
+## 7c. Frontend v1 (DONE — this session)
+- **frontend/twin-x-demo.html** - single self-contained file (vanilla JS +
+  canvas), no build, no server. Opens in any browser; screen-share ready.
+- Replays a REPRESENTATIVE M-class flare: animated coronal-loop background that
+  tenses/warms as the flare builds, a live soft+hard flux trace, and the three
+  outputs (detection / warning / classification). Warning IGNITES ~3 min before
+  peak with a live countdown - driven by the SOFT rise (matches the ablation:
+  hard channel redundant for warning).
+- On-screen honesty label: "representative replay". Timeline built from real
+  flare shapes + the measured ~3-min lead; M1.4 peak; warning fires 3.3 min
+  before peak. Warm-twilight palette (no dark-neon). Type: Syne / Instrument
+  Sans / Spline Sans Mono.
+- Swap to real: replace the SOFT/HARD/DET/WARN/CLS arrays in buildTimeline()
+  with exported model outputs from a real test event - nothing else changes.
+- Lives in frontend/. Deploy via GitHub Pages or Netlify for a live demo link.
+
+---
+
 ## 8. Key findings (these ARE results — put them in the deck)
 
 - **Architecture is not the warning lever.** CNN warning HSS ~0.50 ~= TCN ~0.50.
@@ -372,19 +388,17 @@ on val - detection by TSS, warning by HSS.
 
 ## 12. NEXT (in priority order)
 
-DONE this session: HEL1OS hard-lead [7b.1], paired same-46-days GOES [7b.2],
-lead-time-per-model [7b.3], soft-only ablation [7b.4], classification head
-[7b.5]. **The model is complete** - three outputs, each honestly characterised.
-Remaining:
+DONE: full backend (three outputs, honestly characterised) [7b.*] + frontend v1
+[7c]. **The project is functionally complete.** Remaining, in order:
 
-1. **Phase 5 demo / frontend (NEXT):** live flux dashboard + warning banner over
-   the three outputs. The causal model already supports it. A working model +
-   simple dashboard beats a half-built stack.
+1. **Deploy the demo** (GitHub Pages: Settings->Pages->main/root, or Netlify
+   drop) for a live link - a real asset for the pitch/interview.
 2. **Deck refresh:** lead with the 3.4-min physics headline; state the model as
-   "matches GOES from one newer instrument, 43% fewer days"; report the
-   fusion-redundant finding as a strength (tested three ways), not a gap.
-3. **Optional / future:** longer horizon (8-10 min) where the hard lead MIGHT
-   pay off (coverage drops to ~83%); more Aditya days for tighter stats; a better
-   classifier (weakest output). LSTM/Transformer still not expected to move warning.
+   "matches the GOES workhorse from one newer instrument, 43% fewer days";
+   present the fusion-redundant finding as a TESTED strength, not a gap.
+3. **Optional / future:** swap real model outputs into the demo; longer horizon
+   (8-10 min) where the hard lead MIGHT pay off (coverage drops to ~83%); better
+   classifier (weakest output); React port of the frontend for the MERN stack.
 
-Framework: PyTorch, train on Colab (free GPU), VS Code home base.
+Framework: PyTorch, train on Colab (free GPU), VS Code home base. Frontend:
+vanilla JS + canvas (single file), portable to React.
