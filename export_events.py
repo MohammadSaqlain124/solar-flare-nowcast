@@ -22,12 +22,6 @@ from src.trainer import ARCH, fit_and_eval
 from src.folds import walk_forward_folds
 
 
-def flare_class(peak_flux):
-    e = int(np.floor(np.log10(max(peak_flux, 1e-9))))
-    letter = {-8:"A", -7:"B", -6:"C", -5:"M", -4:"X"}.get(e, "X" if e > -4 else "A")
-    return letter + f"{peak_flux/10**e:.1f}"
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--arch", choices=list(ARCH), default="cnn")
@@ -57,7 +51,7 @@ def main():
     print(f"{args.data}  arch {args.arch}  {len(folds)} folds  -> {args.out}")
 
     # pool every test window across folds
-    C = {k: [] for k in ["t", "ev", "det", "warn", "slog", "hcnt", "thr", "dthr"]}
+    C = {k: [] for k in ["t", "ev", "yc", "det", "warn", "slog", "hcnt", "thr", "dthr"]}
     K = {k: [] for k in ["cev", "cprob", "csoft"]}   # class arrays (active subset)
     for i, masks in enumerate(folds, 1):
         te = masks[2]
@@ -66,6 +60,7 @@ def main():
         n = int(te.sum())
         C["t"].append(z["t_end"][te])
         C["ev"].append(z["event_id"][te])
+        C["yc"].append(z["y_class"][te])
         C["det"].append(r["test"]["det_prob"])
         C["warn"].append(r["test"]["warn_prob"])
         C["slog"].append(Xte[:, -1, iS] * sd[iS] + mu[iS])           # log10 soft flux
@@ -82,7 +77,7 @@ def main():
     o = np.argsort(C["t"])
     for k in C: C[k] = C[k][o]
     t_ns = C["t"].astype("datetime64[ns]").astype("int64")
-    ev, det, warn, slog, hcnt, thr, dthr = C["ev"], C["det"], C["warn"], C["slog"], C["hcnt"], C["thr"], C["dthr"]
+    ev, yc, det, warn, slog, hcnt, thr, dthr = C["ev"], C["yc"], C["det"], C["warn"], C["slog"], C["hcnt"], C["thr"], C["dthr"]
     pad_ns = int(args.pad_min * 60 * 1e9)
 
     def cls_call(e):
@@ -97,8 +92,9 @@ def main():
         sel = np.where((t_ns >= t_ns[own[0]] - pad_ns) & (t_ns <= t_ns[own[-1]] + pad_ns))[0]
         tt, ss, hh, dd, ww = t_ns[sel], slog[sel], hcnt[sel], det[sel], warn[sel]
         own_sel = np.where(ev[sel] == e)[0]
-        peak_j = int(own_sel[ss[own_sel].argmax()])                # flux-peak window (in clip coords)
-        peak_flux = float(10 ** ss[peak_j])
+        peak_j = int(own_sel[ss[own_sel].argmax()])                # brightest SoLEXS window
+        cls_id = int(yc[own].max())                                # real class: 1=C 2=M 3=X
+        letter = {0: "B", 1: "C", 2: "M", 3: "X"}.get(cls_id, "C")
         thr_w = float(thr[own[0]]); thr_d = float(dthr[own[0]])
         fire_j = -1
         for j in own_sel:
@@ -107,7 +103,7 @@ def main():
         trel = ((tt - tt[0]) / 1e9).astype(int)
         cp = cls_call(e)
         events.append({
-            "id": int(e), "cls": flare_class(peak_flux), "mplus": bool(peak_flux >= 1e-5),
+            "id": int(e), "cls": letter, "mplus": bool(cls_id >= 2),
             "t": trel.tolist(),
             "soft": [round(float(x), 3) for x in ss],   # log10 flux
             "hard": [round(float(x), 1) for x in hh],
@@ -125,8 +121,11 @@ def main():
     dst = ROOT / args.out
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.write_text("window.TWINX_EVENTS = " + json.dumps(out, separators=(",", ":")) + ";")
+    from collections import Counter
+    dist = Counter(e["cls"] for e in events)
     mp = sum(e["mplus"] for e in events)
     warned = sum(1 for e in events if e["mplus"] and e["fire"] >= 0)
+    print("class distribution:", dict(dist))
     print(f"\nwrote {args.out}: {len(events)} events ({mp} M+, {len(events)-mp} C), "
           f"warned {warned}/{mp} M+  ({dst.stat().st_size//1024} KB)")
 
