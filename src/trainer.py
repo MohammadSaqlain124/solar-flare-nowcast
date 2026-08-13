@@ -147,6 +147,7 @@ def fit_and_eval(z, arch, hp, seed=0, masks=None, device=None, verbose=False):
         "state": best_state,
         "test": {"det_pred": det_pred, "warn_pred": warn_pred,
                  "y_det": ydt, "y_warn": ywt, "event_id": ev_te,
+                 "det_prob": dpt, "warn_prob": wpt,
                  "cls_pred": cls_pred, "y_cls": y_cls, "cls_event_id": ev_cls,
                  "cls_prob": cpt[at], "cls_t_end": z["t_end"][te_m][at],
                  "cls_soft": z["X"][te_m][at][:, -1, 0]},   # scaled log_xrsb at window-now -> flux-peak anchor
