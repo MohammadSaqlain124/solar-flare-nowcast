@@ -1,6 +1,6 @@
 # PROJECT_STATE — Solar Flare Nowcasting on Aditya-L1 (TWIN-X)
 
-**Owner:** Sam · **Status:** Complete. Full pipeline on real Aditya-L1 data,
+**Owner:** Saqlain · **Status:** Complete. Full pipeline on real Aditya-L1 data,
 three validated outputs (detect / warn / classify), and a live demo frontend.
 Headline result: HEL1OS hard X-rays lead the soft peak by ~3.4 min vs GOES's
 44 s. Results in sections 6-7c; remaining work in section 12.
