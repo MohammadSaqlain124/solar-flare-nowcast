@@ -104,7 +104,7 @@ button.gh{font-family:'Spline Sans Mono',monospace;font-size:.78rem;color:var(--
     </div>
     <div id="samplebanner" class="banner" style="display:none">Sample data shown. Run <b>export_events.py</b> in Colab and drop the generated <b>events.js</b> next to this file to replay real model outputs on the test flares.</div>
     <div class="chartwrap">
-      <div class="legend"><span><i style="background:var(--gold)"></i>soft · SoLEXS</span><span><i style="background:var(--xray)"></i>hard · HEL1OS</span></div>
+      <div class="legend"><span><i style="background:var(--gold)"></i>soft · SoLEXS</span><span><i style="background:var(--xray)"></i>hard · HEL1OS</span><span style="color:#8b8194">· dual axes, different scales</span></div>
       <canvas id="chart"></canvas>
     </div>
     <div class="flux"><span>soft <b class="s" id="fsoft">—</b></span><span>hard <b class="h" id="fhard">—</b></span><span>det <b id="fdet">—</b></span><span>warn <b id="fwarn">—</b></span></div>
@@ -154,7 +154,7 @@ const hMax=55;
 const bg=$('bg'),bx=bg.getContext('2d');let W,H,DPR,loops=[],sparks=[];
 function noise(s){return()=>{s=(s*9301+49297)%233280;return s/233280-.5}}const rnd=noise(11);
 function resizeBg(){DPR=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;bg.width=W*DPR;bg.height=H*DPR;bg.style.width=W+'px';bg.style.height=H+'px';bx.setTransform(DPR,0,0,DPR,0,0);buildLoops()}
-function buildLoops(){loops=[];const n=Math.round(Math.min(W,1200)/95)+6;for(let k=0;k<n;k++){loops.push({cx:(k+.5)/n*W+rnd()*40,foot:60+Math.abs(rnd())*120,h:H*(.42+Math.abs(rnd())*.5),ph:rnd()*6.28,sw:.3+Math.abs(rnd())*.5,hue:38+rnd()*14})}}
+function buildLoops(){loops=[];const n=Math.round(Math.min(W,1200)/120)+5;for(let k=0;k<n;k++){loops.push({cx:(k+.5)/n*W+rnd()*40,foot:60+Math.abs(rnd())*120,h:H*(.42+Math.abs(rnd())*.5),ph:rnd()*6.28,sw:.3+Math.abs(rnd())*.5,hue:38+rnd()*14})}}
 function drawBg(time,inten){
   const g=bx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#120b1c');g.addColorStop(.5,'#1b1230');g.addColorStop(1,'#241634');bx.fillStyle=g;bx.fillRect(0,0,W,H);
   const gy=H*1.04,gr=bx.createRadialGradient(W/2,gy,20,W/2,gy,H*(.9+inten*.3));
@@ -162,7 +162,7 @@ function drawBg(time,inten){
   bx.lineCap='round';
   for(const L of loops){const sway=reduce?0:Math.sin(time*.0004*L.sw+L.ph)*(6+inten*22),ay=H-L.h+sway-inten*30;
     const grad=bx.createLinearGradient(0,H,0,ay),a=.05+inten*.3;grad.addColorStop(0,`hsla(${L.hue},80%,60%,0)`);grad.addColorStop(1,`hsla(${L.hue+inten*8},85%,${62+inten*8}%,${a})`);
-    bx.strokeStyle=grad;bx.lineWidth=1.1+inten*1.6;bx.shadowColor=`hsla(${L.hue},90%,60%,${.25+inten*.4})`;bx.shadowBlur=4+inten*14;
+    bx.strokeStyle=grad;bx.lineWidth=1.1+inten*1.6;bx.shadowColor=`hsla(${L.hue},90%,60%,${.25+inten*.4})`;bx.shadowBlur=3+inten*10;
     bx.beginPath();bx.moveTo(L.cx-L.foot,H+8);bx.quadraticCurveTo(L.cx,ay,L.cx+L.foot,H+8);bx.stroke()}
   bx.shadowBlur=0;
   for(let i=sparks.length-1;i>=0;i--){const s=sparks[i];s.u+=s.v;if(s.u>=1){sparks.splice(i,1);continue}const L=s.L,x=L.cx-L.foot+2*L.foot*s.u,yb=H+8,ya=H-L.h-inten*30,y=yb+(ya-yb)*(1-(2*s.u-1)**2),al=(1-s.u)*(.5+inten*.5);bx.fillStyle=`hsla(${44+inten*8},95%,72%,${al})`;bx.beginPath();bx.arc(x,y,1.4+inten*1.6,0,6.28);bx.fill()}
@@ -172,14 +172,23 @@ function drawBg(time,inten){
 /* chart */
 const ch=$('chart'),cx=ch.getContext('2d');let CW,CH;
 function resizeChart(){const r=ch.getBoundingClientRect();CW=r.width;CH=r.height;ch.width=CW*DPR;ch.height=CH*DPR;cx.setTransform(DPR,0,0,DPR,0,0)}
-const PAD={l:44,r:14,t:36,b:22};
+const PAD={l:30,r:30,t:34,b:34};
 function drawChart(ev,upto){
   cx.clearRect(0,0,CW,CH);if(!ev)return;const n=ev.soft.length;
+  const botY=CH-PAD.b,ph=botY-PAD.t;
   const sx=i=>PAD.l+(i/(n-1))*(CW-PAD.l-PAD.r);
-  const ylo=ev._ylo,yhi=ev._yhi;
-  const sy=v=>PAD.t+(1-(v-ylo)/((yhi-ylo)||1))*(CH-PAD.t-PAD.b);
-  const syH=v=>PAD.t+(1-Math.min(v,hMax)/hMax)*(CH-PAD.t-PAD.b);
-  cx.strokeStyle='#ffffff0d';for(let k=1;k<=3;k++){const y=PAD.t+(k/4)*(CH-PAD.t-PAD.b);cx.beginPath();cx.moveTo(PAD.l,y);cx.lineTo(CW-PAD.r,y);cx.stroke();}
+  const ylo=ev._ylo,yhi=ev._yhi,hlo=ev._hlo,hhi=ev._hhi;
+  const sy=v=>PAD.t+(1-(v-ylo)/((yhi-ylo)||1))*ph;               // left axis: soft
+  const syH=v=>PAD.t+(1-(v-hlo)/((hhi-hlo)||1))*ph;              // right axis: hard (own scale)
+  cx.strokeStyle='#ffffff0c';for(let k=1;k<=3;k++){const y=PAD.t+(k/4)*ph;cx.beginPath();cx.moveTo(PAD.l,y);cx.lineTo(CW-PAD.r,y);cx.stroke()}
+  cx.strokeStyle='#ffffff22';cx.lineWidth=1;cx.beginPath();cx.moveTo(PAD.l,PAD.t);cx.lineTo(PAD.l,botY);cx.lineTo(CW-PAD.r,botY);cx.stroke();
+  cx.strokeStyle='#6fcdd633';cx.beginPath();cx.moveTo(CW-PAD.r,PAD.t);cx.lineTo(CW-PAD.r,botY);cx.stroke();
+  cx.font="9px 'Spline Sans Mono'";cx.fillStyle='#8b8194';cx.textAlign='center';cx.textBaseline='top';
+  for(let k=0;k<=4;k++){const i=Math.round(k/4*(n-1)),x=sx(i);cx.strokeStyle='#ffffff14';cx.beginPath();cx.moveTo(x,botY);cx.lineTo(x,botY+4);cx.stroke();cx.fillText((ev.t[i]/60).toFixed(0),x,botY+7)}
+  cx.fillText('time (min)',(PAD.l+CW-PAD.r)/2,botY+19);
+  cx.save();cx.translate(11,(PAD.t+botY)/2);cx.rotate(-Math.PI/2);cx.textAlign='center';cx.textBaseline='middle';cx.fillStyle='#e8a54a';cx.fillText('SoLEXS soft →',0,0);cx.restore();
+  cx.save();cx.translate(CW-11,(PAD.t+botY)/2);cx.rotate(Math.PI/2);cx.textAlign='center';cx.textBaseline='middle';cx.fillStyle='#6fcdd6';cx.fillText('HEL1OS hard →',0,0);cx.restore();
+  cx.textAlign='left';cx.textBaseline='alphabetic';
   const uu=Math.max(1,upto);
   cx.beginPath();cx.moveTo(sx(0),sy(ev.soft[0]));for(let i=1;i<=uu;i++)cx.lineTo(sx(i),sy(ev.soft[i]));cx.lineTo(sx(uu),CH-PAD.b);cx.lineTo(sx(0),CH-PAD.b);cx.closePath();
   const fg=cx.createLinearGradient(0,PAD.t,0,CH-PAD.b);fg.addColorStop(0,'#e8a54a55');fg.addColorStop(1,'#e8a54a00');cx.fillStyle=fg;cx.fill();
@@ -208,8 +217,11 @@ function select(id){
   idx=0;acc=0;
   document.querySelectorAll('.ev').forEach(x=>x.classList.toggle('sel',+x.dataset.id===id));
   $('evtitle').innerHTML=`Flare #${cur.id} <small>${cur.cls} · ${cur.soft.length} windows${REAL?'':' · sample'}</small>`;
-  let lo=cur.soft[0],hi=cur.soft[0];for(const v of cur.soft){if(v<lo)lo=v;if(v>hi)hi=v}
+  let lo=cur.soft[0],hi=cur.soft[0],hlo=cur.hard[0],hhi=cur.hard[0];
+  for(const v of cur.soft){if(v<lo)lo=v;if(v>hi)hi=v}
+  for(const v of cur.hard){if(v<hlo)hlo=v;if(v>hhi)hhi=v}
   const pad=(hi-lo)*0.12||0.5;cur._ylo=lo-pad;cur._yhi=hi+pad;
+  const hp=(hhi-hlo)*0.14||0.5;cur._hlo=Math.max(0,hlo-hp);cur._hhi=hhi+hp;
   update(0);drawChart(cur,0);playing=true;$('play').textContent='❚❚ Pause';
 }
 function intensity(i){if(!cur)return 0;return Math.max(0,Math.min(1,(cur.soft[i]-cur._ylo)/((cur._yhi-cur._ylo)||1)))}
@@ -233,7 +245,7 @@ function update(i){
 let rafId;
 function frame(ts){
   rafId=requestAnimationFrame(frame);
-  if(ts-lastDraw<32)return;                 // ~30fps cap - smoother than drawing every rAF
+  if(ts-lastDraw<20)return;                 // ~50fps cap
   const d=lastDraw?ts-lastDraw:16;lastDraw=ts;
   drawBg(ts,intensity(idx));
   if(playing&&cur){acc+=d*speed/1000;const dt=cur.t[1]-cur.t[0]||10;
